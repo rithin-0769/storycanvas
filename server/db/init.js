@@ -3,7 +3,6 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// DB file lives next to this file — persists across restarts as long as the disk isn't wiped.
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'storycanvas.db')
 
 const db = new Database(dbPath)
@@ -15,6 +14,8 @@ db.exec(`
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
+    emailVerified INTEGER DEFAULT 0,
+    verificationCode TEXT,
     createdAt TEXT NOT NULL
   );
 
