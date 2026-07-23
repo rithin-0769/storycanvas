@@ -1,7 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
-import './db/init.js'          // creates storycanvas.db + tables on boot
+import './db/init.js'
 import authRoutes from './routes/auth.js'
 import bookRoutes from './routes/books.js'
 
