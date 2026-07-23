@@ -2,9 +2,25 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+console.log('[INIT] Resend API Key present:', process.env.RESEND_API_KEY ? 'YES ✓' : 'NO ✗')
+console.log('[INIT] Resend instance created:', resend ? 'YES ✓' : 'NO ✗')
+
 export const sendVerificationEmail = async (email, name, verificationCode) => {
+  console.log('\n=== EMAIL SEND ATTEMPT ===')
+  console.log('[EMAIL] Recipient:', email)
+  console.log('[EMAIL] User name:', name)
+  console.log('[EMAIL] Code:', verificationCode)
+  console.log('[EMAIL] API Key loaded:', process.env.RESEND_API_KEY ? 'YES ✓' : 'NO ✗')
+  
+  if (!process.env.RESEND_API_KEY) {
+    console.error('[EMAIL] ERROR: RESEND_API_KEY environment variable not set!')
+    return false
+  }
+  
   try {
-    await resend.emails.send({
+    console.log('[EMAIL] Calling resend.emails.send()...')
+    
+    const result = await resend.emails.send({
       from: 'noreply@storycanvas.dev',
       to: email,
       subject: 'Verify your Storycanvas email',
@@ -20,9 +36,19 @@ export const sendVerificationEmail = async (email, name, verificationCode) => {
         </div>
       `,
     })
+    
+    console.log('[EMAIL] ✓ SUCCESS')
+    console.log('[EMAIL] Response ID:', result.id)
+    console.log('[EMAIL] Email sent to:', email)
+    console.log('=== EMAIL SEND COMPLETE ===\n')
     return true
+    
   } catch (error) {
-    console.error('Email send error:', error)
+    console.error('\n[EMAIL] ✗ FAILED')
+    console.error('[EMAIL] Error type:', error.constructor.name)
+    console.error('[EMAIL] Error message:', error.message)
+    console.error('[EMAIL] Full error:', JSON.stringify(error, null, 2))
+    console.error('=== EMAIL SEND FAILED ===\n')
     return false
   }
 }
