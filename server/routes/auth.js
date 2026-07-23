@@ -1,6 +1,7 @@
 import express from 'express'
 import { User } from '../models/User.js'
 import { signToken, protect } from '../middleware/auth.js'
+import { sendVerificationEmail } from '../email.js'
 
 const router = express.Router()
 
@@ -15,9 +16,12 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already in use' })
 
     const user = await User.create({ name: name.trim(), email: email.trim(), password })
+    
+    // Send verification email
+    await sendVerificationEmail(user.email, user.name, user.verificationCode)
+
     res.status(201).json({
-      message: 'Account created! Check the verification code below.',
-      verificationCode: user.verificationCode,
+      message: 'Account created! Check your email for the verification code.',
       token: signToken(user.id),
       user: User.sanitize(user),
     })
