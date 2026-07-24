@@ -21,7 +21,7 @@ export const sendVerificationEmail = async (email, name, verificationCode) => {
     console.log('[EMAIL] Calling resend.emails.send()...')
     
     const result = await resend.emails.send({
-      from: 'noreply@storycanvas.dev',
+      from: 'onboarding@resend.dev',
       to: email,
       subject: 'Verify your Storycanvas email',
       html: `
