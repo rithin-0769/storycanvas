@@ -1,57 +1,18 @@
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { Mail, CheckCircle, Loader } from 'lucide-react'
 
 export default function Home() {
   const { login, register } = useAuth()
-  const [mode, setMode] = useState('landing')
   const [form, setForm] = useState({ name: '', email: '', password: '' })
-  const [verificationCode, setVerificationCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [userEmail, setUserEmail] = useState('')
 
   const handleRegister = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-
-      localStorage.setItem('token', data.token)
-      setUserEmail(form.email)
-      setMode('verify')
-      setForm({ name: '', email: '', password: '' })
-    } catch (err) {
-      setError(err.message)
-    }
-    setLoading(false)
-  }
-
-  const handleVerify = async (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/auth/verify-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ code: verificationCode }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-
-      setMode('landing')
-      setVerificationCode('')
+      await register(form.name, form.email, form.password)
       window.location.href = '/dashboard'
     } catch (err) {
       setError(err.message)
@@ -70,94 +31,6 @@ export default function Home() {
       setError(err.message)
     }
     setLoading(false)
-  }
-
-  if (mode === 'verify') {
-    return (
-      <div style={{ minHeight: '100vh', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-        <div style={{ maxWidth: 420, width: '100%', background: 'var(--ink2)', borderRadius: 'var(--r-lg)', border: '1px solid var(--border)', padding: 32 }}>
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <Mail size={48} style={{ color: 'var(--gold)', margin: '0 auto 16px' }} />
-            <h2 style={{ fontSize: 22, fontWeight: 600, color: 'var(--white)', margin: '0 0 8px' }}>Check your email</h2>
-            <p style={{ fontSize: 13, color: 'var(--slate)', margin: 0, lineHeight: 1.6 }}>
-              We sent a verification code to<br/><strong style={{ color: 'var(--gold)' }}>{userEmail}</strong>
-            </p>
-          </div>
-
-          <form onSubmit={handleVerify} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--slate)', fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>Verification code</label>
-              <input
-                type="text"
-                placeholder="000000"
-                value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value.slice(0, 6).toUpperCase())}
-                maxLength="6"
-                style={{
-                  fontSize: 18,
-                  padding: 12,
-                  textAlign: 'center',
-                  letterSpacing: 4,
-                  background: 'rgba(255,255,255,.04)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--r-sm)',
-                  color: 'var(--white)',
-                  fontWeight: 600,
-                  width: '100%',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            {error && <div style={{ fontSize: 12, color: '#D85A5A', padding: '8px 12px', background: 'rgba(216,90,90,.1)', borderRadius: 'var(--r-sm)' }}>{error}</div>}
-
-            <button
-              type="submit"
-              disabled={loading || verificationCode.length !== 6}
-              style={{
-                padding: 12,
-                background: verificationCode.length === 6 ? 'var(--gold)' : 'rgba(201,168,76,.3)',
-                color: verificationCode.length === 6 ? '#0A0E17' : 'var(--slate)',
-                border: 'none',
-                borderRadius: 'var(--r-sm)',
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: verificationCode.length === 6 ? 'pointer' : 'not-allowed',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-            >
-              {loading ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Verifying...</> : 'Verify email'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMode('landing')}
-              style={{
-                padding: 12,
-                background: 'transparent',
-                color: 'var(--slate)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--r-sm)',
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
-            >
-              Go back
-            </button>
-
-            <p style={{ fontSize: 11, color: 'var(--slate)', textAlign: 'center', margin: '10px 0 0' }}>
-              Didn't receive it? Check spam or
-              <button onClick={() => setMode('landing')} style={{ background: 'none', border: 'none', color: 'var(--gold)', cursor: 'pointer', textDecoration: 'underline', padding: 0, marginLeft: 4 }}>
-                try another email
-              </button>
-            </p>
-          </form>
-        </div>
-      </div>
-    )
   }
 
   return (
