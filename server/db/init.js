@@ -14,8 +14,6 @@ db.exec(`
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
-    emailVerified INTEGER DEFAULT 0,
-    verificationCode TEXT,
     createdAt TEXT NOT NULL
   );
 
