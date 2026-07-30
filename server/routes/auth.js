@@ -1,7 +1,6 @@
 import express from 'express'
 import { User } from '../models/User.js'
 import { signToken, protect } from '../middleware/auth.js'
-import { sendVerificationEmail } from '../email.js'
 
 const router = express.Router()
 
@@ -16,34 +15,9 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already in use' })
 
     const user = await User.create({ name: name.trim(), email: email.trim(), password })
-    
-    // Send verification email
-    await sendVerificationEmail(user.email, user.name, user.verificationCode)
-
     res.status(201).json({
-      message: 'Account created! Check your email for the verification code.',
       token: signToken(user.id),
       user: User.sanitize(user),
-    })
-  } catch (err) {
-    res.status(500).json({ error: err.message })
-  }
-})
-
-router.post('/verify-email', protect, async (req, res) => {
-  try {
-    const { code } = req.body
-    if (!code?.trim())
-      return res.status(400).json({ error: 'Verification code is required' })
-
-    const user = User.findByVerificationCode(code.trim())
-    if (!user || user.id !== req.user.id)
-      return res.status(400).json({ error: 'Invalid or expired code' })
-
-    const verified = User.verifyEmail(user.id)
-    res.json({
-      message: 'Email verified!',
-      user: User.sanitize(verified),
     })
   } catch (err) {
     res.status(500).json({ error: err.message })
