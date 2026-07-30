@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from 'react'
+import { useCallback, useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import ReactFlow, {
   Background, Controls, MiniMap,
@@ -7,33 +7,48 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useBooks } from '../hooks/useBooks'
-import { NODE_TYPES_CONFIG, EDGE_TYPES, DEFAULT_NODES } from '../data/constants'
+import {
+  NODE_TYPES_CONFIG, LOCATION_TYPES_CONFIG, CHARACTER_TYPES_CONFIG,
+  EDGE_TYPES, edgeOptionsFor, DEFAULT_NODES, DEFAULT_EDGES,
+} from '../data/constants'
 import { Btn, Modal, Spinner } from '../components/ui'
-import { ArrowLeft, Plus, Download, Map, Sparkles, X, Loader, Trash2 } from 'lucide-react'
+import { ArrowLeft, Plus, Download, Map, Sparkles, X, Loader, MapPin, Users, LayoutGrid } from 'lucide-react'
 import { Handle, Position } from 'reactflow'
 
-// ── Location Node ─────────────────────────────────────
-function LocationNode({ data, selected }) {
-  const cfg = NODE_TYPES_CONFIG[data.nodeType] || NODE_TYPES_CONFIG.location
+// ── Entity Node (location or character) ──────────────
+function EntityNode({ data, selected }) {
+  const cfg = NODE_TYPES_CONFIG[data.nodeType] || LOCATION_TYPES_CONFIG.location
   const c = cfg.color
+  const isCharacter = data.category === 'character'
   return (
     <div style={{
-      background: selected ? '#1E2A44' : '#161D2E',
+      background: selected ? `linear-gradient(160deg, ${c}22, #1E2A44)` : '#161D2E',
       border: `1.5px solid ${selected ? c : c+'55'}`,
-      borderRadius:10, padding:'10px 14px', minWidth:130, maxWidth:180,
-      boxShadow: selected ? `0 0 0 2px ${c}28,0 4px 20px rgba(0,0,0,.5)` : '0 2px 12px rgba(0,0,0,.4)',
-      transition:'all .15s', cursor:'pointer', fontFamily:'var(--font-body)',
+      borderRadius: 14, padding:'11px 15px', minWidth:136, maxWidth:186,
+      boxShadow: selected ? `0 0 0 3px ${c}22, 0 10px 28px rgba(0,0,0,.5)` : '0 2px 12px rgba(0,0,0,.4)',
+      transition:'all .22s cubic-bezier(.2,.8,.3,1)', cursor:'pointer', fontFamily:'var(--font-body)',
+      transform: selected ? 'translateY(-2px) scale(1.02)' : 'none',
     }}>
       {[Position.Top,Position.Bottom,Position.Left,Position.Right].map(p=>(
         <Handle key={p} type={p===Position.Top||p===Position.Left?'target':'source'} position={p}
-          style={{ background:c, border:'none', width:8, height:8 }}/>
+          style={{ background:c, border:'none', width:8, height:8, boxShadow:`0 0 5px ${c}` }}/>
       ))}
       <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
-        <div style={{ width:8, height:8, borderRadius:'50%', background:c, boxShadow:`0 0 6px ${c}`, flexShrink:0 }}/>
+        {isCharacter ? (
+          <div style={{
+            width:16, height:16, borderRadius:'50%', flexShrink:0,
+            background:`radial-gradient(circle at 35% 30%, ${c}, ${c}99)`,
+            boxShadow:`0 0 7px ${c}88`, display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:8,
+          }}>{cfg.icon}</div>
+        ) : (
+          <div style={{ width:8, height:8, borderRadius:'50%', background:c, boxShadow:`0 0 6px ${c}`, flexShrink:0 }}/>
+        )}
         <span style={{ fontSize:9, color:c, fontWeight:600, textTransform:'uppercase', letterSpacing:.8 }}>{cfg.label}</span>
       </div>
       <div style={{ fontSize:12, fontWeight:600, color:'#F4F0EA', lineHeight:1.3, wordBreak:'break-word' }}>{data.label}</div>
-      {data.population && <div style={{ fontSize:10, color:'#7A8499', marginTop:4 }}>Pop. {data.population}</div>}
+      {!isCharacter && data.population && <div style={{ fontSize:10, color:'#7A8499', marginTop:4 }}>Pop. {data.population}</div>}
+      {isCharacter && data.role && <div style={{ fontSize:10, color:'#7A8499', marginTop:4 }}>{data.role}{data.age?` · ${data.age}`:''}</div>}
       {data.chapter && (
         <div style={{ marginTop:5, fontSize:9, color:'#7A8499', background:'rgba(255,255,255,.04)', borderRadius:4, padding:'2px 6px', display:'inline-block' }}>
           {data.chapter}
@@ -43,39 +58,41 @@ function LocationNode({ data, selected }) {
   )
 }
 
-const nodeTypes = { locationNode: LocationNode }
+const nodeTypes = { entityNode: EntityNode }
 
 function buildEdgeStyle(edgeType) {
   const cfg = EDGE_TYPES[edgeType] || EDGE_TYPES.trade
   return {
     style: { stroke:cfg.color, strokeWidth:1.8, strokeDasharray:cfg.dash?'6 4':undefined },
     markerEnd: { type:MarkerType.ArrowClosed, color:cfg.color, width:13, height:13 },
-    label:cfg.label, type:'smoothstep',
+    label:cfg.label, type:'smoothstep', animated: !!cfg.dash,
     labelStyle:{ fill:cfg.color, fontSize:10, fontWeight:600, fontFamily:'Inter,sans-serif' },
     labelBgStyle:{ fill:'#0A0E17', fillOpacity:.88 },
     labelBgPadding:[4,2], labelBgBorderRadius:4,
   }
 }
-const stripEdge = ({ style, markerEnd, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, ...r }) => r
+const stripEdge = ({ style, markerEnd, labelStyle, labelBgStyle, labelBgPadding, labelBgBorderRadius, animated, ...r }) => r
 
 // ── Node Sidebar ─────────────────────────────────────
 function NodeSidebar({ node, onUpdate, onDelete, onClose }) {
   const [tab, setTab] = useState('details')
   const [aiText, setAiText] = useState(node.data.lore || '')
   const [aiLoading, setAiLoading] = useState(false)
-  const cfg = NODE_TYPES_CONFIG[node.data.nodeType] || NODE_TYPES_CONFIG.location
+  const cfg = NODE_TYPES_CONFIG[node.data.nodeType] || LOCATION_TYPES_CONFIG.location
   const c = cfg.color
+  const isCharacter = node.data.category === 'character'
+  const categoryTypes = isCharacter ? CHARACTER_TYPES_CONFIG : LOCATION_TYPES_CONFIG
   const upd = (k,v) => onUpdate(node.id, { ...node.data, [k]:v })
 
   const expandLore = async () => {
     setAiLoading(true); setAiText(''); setTab('ai')
     try {
+      const prompt = isCharacter
+        ? `Write 2 paragraphs of rich, atmospheric character lore. Dark epic fantasy tone.\n\nName: ${node.data.label}\nRole: ${cfg.label}\nDescription: ${node.data.description}\nAge: ${node.data.age}\nAppearance: ${node.data.appearance}`
+        : `Write 2 paragraphs of rich, atmospheric lore for this fictional location. Dark epic fantasy tone.\n\nLocation: ${node.data.label}\nType: ${cfg.label}\nDescription: ${node.data.description}\nClimate: ${node.data.climate}\nPopulation: ${node.data.population}\nRuler: ${node.data.ruler}`
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method:'POST', headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({
-          model:'claude-sonnet-4-6', max_tokens:900, stream:true,
-          messages:[{ role:'user', content:`Write 2 paragraphs of rich, atmospheric lore for this fictional location. Dark epic fantasy tone.\n\nLocation: ${node.data.label}\nType: ${cfg.label}\nDescription: ${node.data.description}\nClimate: ${node.data.climate}\nPopulation: ${node.data.population}\nRuler: ${node.data.ruler}` }],
-        }),
+        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:900, stream:true, messages:[{ role:'user', content:prompt }] }),
       })
       const reader = res.body.getReader(); const dec = new TextDecoder(); let buf=''
       while(true) {
@@ -96,9 +113,9 @@ function NodeSidebar({ node, onUpdate, onDelete, onClose }) {
       <label style={{ fontSize:10, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:5 }}>{label}</label>
       {multi
         ? <textarea value={node.data[field]||''} onChange={e=>upd(field,e.target.value)} rows={3}
-            style={{ width:'100%', background:'rgba(255,255,255,.04)', border:'1px solid var(--border2)', borderRadius:'var(--r-sm)', color:'var(--white)', fontSize:12, padding:'7px 10px', resize:'vertical', lineHeight:1.6 }}/>
+            style={{ width:'100%', background:'rgba(255,255,255,.04)', border:'1px solid var(--border2)', borderRadius:'var(--r-sm)', color:'var(--white)', fontSize:12, padding:'7px 10px', resize:'vertical', lineHeight:1.6, transition:'border-color .15s' }}/>
         : <input value={node.data[field]||''} onChange={e=>upd(field,e.target.value)}
-            style={{ width:'100%', background:'rgba(255,255,255,.04)', border:'1px solid var(--border2)', borderRadius:'var(--r-sm)', color:'var(--white)', fontSize:12, padding:'6px 10px' }}/>
+            style={{ width:'100%', background:'rgba(255,255,255,.04)', border:'1px solid var(--border2)', borderRadius:'var(--r-sm)', color:'var(--white)', fontSize:12, padding:'6px 10px', transition:'border-color .15s' }}/>
       }
     </div>
   )
@@ -124,7 +141,7 @@ function NodeSidebar({ node, onUpdate, onDelete, onClose }) {
           <button key={id} onClick={()=>setTab(id)} style={{
             flex:1, padding:'9px', fontSize:12, fontWeight:500, background:'transparent',
             color:tab===id?'var(--white)':'var(--slate)',
-            borderBottom:tab===id?`2px solid ${c}`:'2px solid transparent', transition:'all .15s',
+            borderBottom:tab===id?`2px solid ${c}`:'2px solid transparent', transition:'all .2s cubic-bezier(.2,.8,.3,1)',
           }}>{label}</button>
         ))}
       </div>
@@ -135,20 +152,30 @@ function NodeSidebar({ node, onUpdate, onDelete, onClose }) {
             <div style={{ marginBottom:13 }}>
               <label style={{ fontSize:10, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:6 }}>Type</label>
               <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                {Object.entries(NODE_TYPES_CONFIG).map(([key,v])=>(
+                {Object.entries(categoryTypes).map(([key,v])=>(
                   <button key={key} onClick={()=>upd('nodeType',key)} style={{
                     fontSize:10, padding:'3px 9px', borderRadius:20,
                     background:node.data.nodeType===key?`${v.color}20`:'rgba(255,255,255,.04)',
                     border:`1px solid ${node.data.nodeType===key?v.color:'rgba(255,255,255,.1)'}`,
-                    color:node.data.nodeType===key?v.color:'var(--slate)', transition:'all .15s',
+                    color:node.data.nodeType===key?v.color:'var(--slate)', transition:'all .2s cubic-bezier(.2,.8,.3,1)',
                   }}>{v.icon} {v.label}</button>
                 ))}
               </div>
             </div>
             <F label="Description" field="description" multi/>
-            <F label="Climate" field="climate"/>
-            <F label="Population" field="population"/>
-            <F label="Ruler" field="ruler"/>
+            {isCharacter ? (
+              <>
+                <F label="Role" field="role"/>
+                <F label="Age" field="age"/>
+                <F label="Appearance" field="appearance"/>
+              </>
+            ) : (
+              <>
+                <F label="Climate" field="climate"/>
+                <F label="Population" field="population"/>
+                <F label="Ruler" field="ruler"/>
+              </>
+            )}
             <F label="Appears in" field="chapter"/>
             {node.data.lore && (
               <div style={{ marginBottom:13 }}>
@@ -167,6 +194,7 @@ function NodeSidebar({ node, onUpdate, onDelete, onClose }) {
               width:'100%', padding:'9px', background:aiLoading?'rgba(201,168,76,.08)':'rgba(201,168,76,.14)',
               border:'1px solid rgba(201,168,76,.32)', borderRadius:'var(--r-sm)', color:'var(--gold)',
               fontSize:12, fontWeight:600, display:'flex', alignItems:'center', justifyContent:'center', gap:7, marginBottom:14,
+              transition:'all .2s cubic-bezier(.2,.8,.3,1)',
             }}>
               {aiLoading?<><Loader size={13} style={{ animation:'spin 1s linear infinite' }}/> Generating...</>:<><Sparkles size={13}/> Expand lore with AI</>}
             </button>
@@ -185,50 +213,67 @@ function NodeSidebar({ node, onUpdate, onDelete, onClose }) {
       <div style={{ padding:'11px 14px', borderTop:'1px solid var(--border)' }}>
         <button onClick={()=>onDelete(node.id)} style={{
           width:'100%', padding:'7px', background:'rgba(216,90,90,.1)', border:'1px solid rgba(216,90,90,.28)',
-          borderRadius:'var(--r-sm)', color:'var(--red)', fontSize:12, fontWeight:500,
+          borderRadius:'var(--r-sm)', color:'var(--red)', fontSize:12, fontWeight:500, transition:'background .2s',
         }}
         onMouseEnter={e=>e.currentTarget.style.background='rgba(216,90,90,.18)'}
         onMouseLeave={e=>e.currentTarget.style.background='rgba(216,90,90,.1)'}
-        >Delete location</button>
+        >Delete {isCharacter ? 'character' : 'location'}</button>
       </div>
     </div>
   )
 }
 
 // ── Add Node Modal ───────────────────────────────────
-function AddNodeModal({ onAdd, onClose }) {
-  const [form, setForm] = useState({ label:'', nodeType:'location', description:'', climate:'', population:'', ruler:'', chapter:'' })
+function AddNodeModal({ defaultCategory, onAdd, onClose }) {
+  const firstOfCategory = (cat) => Object.keys(cat === 'character' ? CHARACTER_TYPES_CONFIG : LOCATION_TYPES_CONFIG)[0]
+  const [category, setCategory] = useState(defaultCategory || 'location')
+  const [form, setForm] = useState({ label:'', nodeType:firstOfCategory(defaultCategory||'location'), description:'', climate:'', population:'', ruler:'', role:'', age:'', appearance:'', chapter:'' })
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
-  const submit = () => { if(!form.label.trim()) return; onAdd({...form,lore:''}); onClose() }
+  const switchCategory = (cat) => { setCategory(cat); set('nodeType', firstOfCategory(cat)) }
+  const submit = () => { if(!form.label.trim()) return; onAdd({...form, category, lore:''}); onClose() }
+  const activeTypes = category === 'character' ? CHARACTER_TYPES_CONFIG : LOCATION_TYPES_CONFIG
 
   return (
-    <Modal title="Add location" onClose={onClose}>
+    <Modal title={category === 'character' ? 'Add character' : 'Add location'} onClose={onClose}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div style={{ display:'flex', gap:8, background:'rgba(255,255,255,.03)', padding:4, borderRadius:'var(--r-sm)' }}>
+          {[['location','📍 Location'],['character','🎭 Character']].map(([key,label])=>(
+            <button key={key} onClick={()=>switchCategory(key)} style={{
+              flex:1, padding:'8px', borderRadius:8, fontSize:12, fontWeight:600,
+              background:category===key?'rgba(255,255,255,.08)':'transparent',
+              color:category===key?'var(--white)':'var(--slate)',
+              transition:'all .2s cubic-bezier(.2,.8,.3,1)',
+            }}>{label}</button>
+          ))}
+        </div>
         <div>
           <label style={{ fontSize:11, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:6 }}>Name *</label>
-          <input autoFocus placeholder="e.g. Ironhold Fortress" value={form.label} onChange={e=>set('label',e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()}
+          <input autoFocus placeholder={category==='character'?'e.g. Kestrel Vane':'e.g. Ironhold Fortress'} value={form.label} onChange={e=>set('label',e.target.value)} onKeyDown={e=>e.key==='Enter'&&submit()}
             style={{ width:'100%', background:'rgba(255,255,255,.05)', border:'1px solid var(--border2)', borderRadius:'var(--r-sm)', color:'var(--white)', fontSize:14, padding:'10px 12px' }}/>
         </div>
         <div>
           <label style={{ fontSize:11, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:6 }}>Type</label>
           <div style={{ display:'flex', flexWrap:'wrap', gap:7 }}>
-            {Object.entries(NODE_TYPES_CONFIG).map(([key,v])=>(
+            {Object.entries(activeTypes).map(([key,v])=>(
               <button key={key} onClick={()=>set('nodeType',key)} style={{
                 fontSize:12, padding:'5px 11px', borderRadius:20,
                 background:form.nodeType===key?`${v.color}20`:'rgba(255,255,255,.04)',
                 border:`1px solid ${form.nodeType===key?v.color:'rgba(255,255,255,.1)'}`,
-                color:form.nodeType===key?v.color:'var(--slate)', transition:'all .15s',
+                color:form.nodeType===key?v.color:'var(--slate)', transition:'all .2s cubic-bezier(.2,.8,.3,1)',
               }}>{v.icon} {v.label}</button>
             ))}
           </div>
         </div>
         <div>
           <label style={{ fontSize:11, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:6 }}>Description</label>
-          <textarea placeholder="What makes this place unique?" value={form.description} onChange={e=>set('description',e.target.value)} rows={2}
+          <textarea placeholder={category==='character'?'Who are they, and what do they want?':'What makes this place unique?'} value={form.description} onChange={e=>set('description',e.target.value)} rows={2}
             style={{ width:'100%', background:'rgba(255,255,255,.05)', border:'1px solid var(--border2)', borderRadius:'var(--r-sm)', color:'var(--white)', fontSize:13, padding:'8px 12px', resize:'none', lineHeight:1.6 }}/>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-          {[['Climate','climate'],['Population','population'],['Ruler','ruler'],['Appears in','chapter']].map(([l,k])=>(
+          {(category === 'character'
+            ? [['Role','role'],['Age','age'],['Appearance','appearance'],['Appears in','chapter']]
+            : [['Climate','climate'],['Population','population'],['Ruler','ruler'],['Appears in','chapter']]
+          ).map(([l,k])=>(
             <div key={k}>
               <label style={{ fontSize:11, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:5 }}>{l}</label>
               <input placeholder={l} value={form[k]} onChange={e=>set(k,e.target.value)}
@@ -247,9 +292,10 @@ function AddNodeModal({ onAdd, onClose }) {
 
 // ── Edge Modal ───────────────────────────────────────
 function EdgeModal({ src, tgt, onConfirm, onClose }) {
-  const [type, setType] = useState('trade')
+  const options = useMemo(() => edgeOptionsFor(src?.data?.category, tgt?.data?.category), [src, tgt])
+  const [type, setType] = useState(Object.keys(options)[0])
   return (
-    <Modal title="Connect locations" onClose={onClose} width={360}>
+    <Modal title="Connect entities" onClose={onClose} width={360}>
       <div style={{ background:'rgba(255,255,255,.04)', borderRadius:'var(--r-sm)', padding:'9px 13px', marginBottom:16, fontSize:13, display:'flex', alignItems:'center', gap:8 }}>
         <span style={{ fontWeight:500, color:'var(--white)' }}>{src?.data?.label}</span>
         <span style={{ color:'var(--slate)' }}>→</span>
@@ -257,13 +303,13 @@ function EdgeModal({ src, tgt, onConfirm, onClose }) {
       </div>
       <label style={{ fontSize:11, color:'var(--slate)', fontWeight:600, textTransform:'uppercase', letterSpacing:.7, display:'block', marginBottom:9 }}>Connection type</label>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:18 }}>
-        {Object.entries(EDGE_TYPES).map(([key,v])=>(
+        {Object.entries(options).map(([key,v])=>(
           <button key={key} onClick={()=>setType(key)} style={{
             padding:'8px 11px', borderRadius:'var(--r-sm)',
             background:type===key?`${v.color}18`:'rgba(255,255,255,.03)',
             border:`1px solid ${type===key?v.color:'rgba(255,255,255,.09)'}`,
             color:type===key?v.color:'var(--slate)', fontSize:12, fontWeight:type===key?600:400,
-            display:'flex', alignItems:'center', gap:6, transition:'all .15s',
+            display:'flex', alignItems:'center', gap:6, transition:'all .2s cubic-bezier(.2,.8,.3,1)',
           }}>
             <div style={{ width:18, height:1.5, background:v.color, borderRadius:1 }}/>
             {v.label}
@@ -272,9 +318,40 @@ function EdgeModal({ src, tgt, onConfirm, onClose }) {
       </div>
       <div style={{ display:'flex', gap:10 }}>
         <Btn variant="ghost" style={{ flex:1 }} onClick={onClose}>Cancel</Btn>
-        <Btn style={{ flex:2, background:EDGE_TYPES[type].color }} onClick={()=>onConfirm(type)}>Add connection</Btn>
+        <Btn style={{ flex:2, background:options[type].color }} onClick={()=>onConfirm(type)}>Add connection</Btn>
       </div>
     </Modal>
+  )
+}
+
+// ── Category filter pill ─────────────────────────────
+function CategoryFilter({ value, onChange }) {
+  const options = [
+    { key:'all', label:'All', icon:LayoutGrid },
+    { key:'location', label:'Locations', icon:MapPin },
+    { key:'character', label:'Characters', icon:Users },
+  ]
+  const idx = options.findIndex(o=>o.key===value)
+  return (
+    <div style={{ position:'relative', display:'flex', background:'rgba(255,255,255,.04)', borderRadius:20, padding:3, flexShrink:0 }}>
+      <div style={{
+        position:'absolute', top:3, bottom:3, left:3,
+        width:`calc((100% - 6px) / 3)`,
+        transform:`translateX(${idx*100}%)`,
+        background:'rgba(255,255,255,.09)', borderRadius:16,
+        transition:'transform .28s cubic-bezier(.2,.8,.3,1)',
+      }}/>
+      {options.map(({key,label,icon:Icon})=>(
+        <button key={key} onClick={()=>onChange(key)} style={{
+          position:'relative', zIndex:1, padding:'5px 12px', borderRadius:16,
+          fontSize:11, fontWeight:600, display:'flex', alignItems:'center', gap:5,
+          color:value===key?'var(--white)':'var(--slate)', whiteSpace:'nowrap',
+          transition:'color .2s',
+        }}>
+          <Icon size={11}/> {label}
+        </button>
+      ))}
+    </div>
   )
 }
 
@@ -293,13 +370,16 @@ export default function CanvasPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(true)
   const [pageLoading, setPageLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
 
   // Load book
   useEffect(() => {
     getBook(id).then(b => {
       setBook(b)
-      setNodes(b.nodes?.length ? b.nodes : DEFAULT_NODES)
-      setEdges((b.edges||[]).map(e=>({...e,...buildEdgeStyle(e.data?.edgeType)})))
+      const usingDefaults = !b.nodes?.length
+      setNodes(usingDefaults ? DEFAULT_NODES : b.nodes)
+      const rawEdges = usingDefaults ? DEFAULT_EDGES : (b.edges||[])
+      setEdges(rawEdges.map(e=>({...e,...buildEdgeStyle(e.data?.edgeType)})))
       setPageLoading(false)
     }).catch(() => navigate('/dashboard'))
   }, [id])
@@ -340,7 +420,7 @@ export default function CanvasPage() {
   }
 
   const addNode = (data) => {
-    const newNode = { id:`n-${Date.now()}`, type:'locationNode', position:{x:180+Math.random()*300,y:120+Math.random()*220}, data }
+    const newNode = { id:`n-${Date.now()}`, type:'entityNode', position:{x:180+Math.random()*300,y:120+Math.random()*220}, data }
     setNodes(ns => [...ns, newNode])
   }
 
@@ -350,6 +430,13 @@ export default function CanvasPage() {
     Object.assign(document.createElement('a'),{href:url,download:`${book.title.replace(/\s+/g,'-')}.json`}).click()
     URL.revokeObjectURL(url)
   }
+
+  const visibleNodes = useMemo(() => filter === 'all' ? nodes : nodes.filter(n => n.data.category === filter), [nodes, filter])
+  const visibleIds = useMemo(() => new Set(visibleNodes.map(n=>n.id)), [visibleNodes])
+  const visibleEdges = useMemo(() => edges.filter(e => visibleIds.has(e.source) && visibleIds.has(e.target)), [edges, visibleIds])
+
+  const locationCount = useMemo(() => nodes.filter(n=>n.data.category==='location').length, [nodes])
+  const characterCount = useMemo(() => nodes.filter(n=>n.data.category==='character').length, [nodes])
 
   if (pageLoading) return (
     <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--ink)' }}>
@@ -361,11 +448,25 @@ export default function CanvasPage() {
   const tgtNode = pending ? nodes.find(n=>n.id===pending.target) : null
 
   return (
-    <div style={{ width:'100vw', height:'100vh', position:'relative', background:'var(--ink)' }}>
+    <div style={{ width:'100vw', height:'100vh', position:'relative', background:'var(--ink)', overflow:'hidden' }}>
+      {/* Ambient background blobs for fluid depth */}
+      <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden', zIndex:0 }}>
+        <div style={{
+          position:'absolute', top:'-10%', left:'8%', width:420, height:420, borderRadius:'50%',
+          background:'radial-gradient(circle, rgba(76,159,232,.08), transparent 70%)',
+          animation:'floatBlob 22s ease-in-out infinite',
+        }}/>
+        <div style={{
+          position:'absolute', bottom:'-15%', right:'5%', width:480, height:480, borderRadius:'50%',
+          background:'radial-gradient(circle, rgba(232,93,158,.07), transparent 70%)',
+          animation:'floatBlob 26s ease-in-out infinite reverse',
+        }}/>
+      </div>
+
       {/* Toolbar */}
       <div style={{
         position:'absolute', top:0, left:0, right:0, zIndex:10, height:50,
-        background:'rgba(10,14,23,.92)', backdropFilter:'blur(16px)',
+        background:'rgba(10,14,23,.92)', backdropFilter:'blur(18px)',
         borderBottom:'1px solid var(--border)',
         display:'flex', alignItems:'center', padding:'0 14px', gap:10,
       }}>
@@ -383,11 +484,13 @@ export default function CanvasPage() {
 
         <div style={{ flex:1 }}/>
 
+        <CategoryFilter value={filter} onChange={setFilter}/>
+
         {/* Stats */}
-        {[`${nodes.length} locations`,`${edges.length} connections`].map(s=>(
-          <div key={s} style={{ fontSize:11, color:'var(--slate)', background:'rgba(255,255,255,.04)', padding:'2px 9px', borderRadius:20, whiteSpace:'nowrap', display:'flex', gap:4 }}>
-            <span style={{ color:'var(--white)', fontWeight:600 }}>{s.split(' ')[0]}</span>
-            <span>{s.split(' ').slice(1).join(' ')}</span>
+        {[[locationCount,'locations'],[characterCount,'characters'],[edges.length,'connections']].map(([n,label])=>(
+          <div key={label} style={{ fontSize:11, color:'var(--slate)', background:'rgba(255,255,255,.04)', padding:'2px 9px', borderRadius:20, whiteSpace:'nowrap', display:'flex', gap:4 }}>
+            <span style={{ color:'var(--white)', fontWeight:600 }}>{n}</span>
+            <span>{label}</span>
           </div>
         ))}
 
@@ -403,14 +506,14 @@ export default function CanvasPage() {
           <Download size={12}/> Export
         </Btn>
         <Btn size="sm" onClick={()=>setShowAdd(true)} style={{ gap:5, flexShrink:0 }}>
-          <Plus size={14}/> Add location
+          <Plus size={14}/> Add
         </Btn>
       </div>
 
       {/* Flow */}
-      <div style={{ position:'absolute', top:50, left:0, right:0, bottom:0 }}>
+      <div style={{ position:'absolute', top:50, left:0, right:0, bottom:0, zIndex:1 }}>
         <ReactFlow
-          nodes={nodes} edges={edges}
+          nodes={visibleNodes} edges={visibleEdges}
           onNodesChange={onNodesChange} onEdgesChange={onEdgesChange}
           onConnect={onConnect} onNodeClick={onNodeClick} onPaneClick={onPaneClick}
           nodeTypes={nodeTypes}
@@ -420,17 +523,23 @@ export default function CanvasPage() {
           minZoom={.1} maxZoom={2.5} deleteKeyCode="Delete"
           proOptions={{ hideAttribution:true }}
         >
-          <Background color="rgba(255,255,255,.05)" gap={26} size={1} style={{ background:'var(--ink)' }}/>
+          <Background color="rgba(255,255,255,.05)" gap={26} size={1} style={{ background:'transparent' }}/>
           <Controls showInteractive={false}/>
-          <MiniMap maskColor="rgba(10,14,23,.7)" style={{ background:'#161D2E', border:'1px solid var(--border)', borderRadius:9 }}/>
+          <MiniMap
+            maskColor="rgba(10,14,23,.7)"
+            style={{ background:'#161D2E', border:'1px solid var(--border)', borderRadius:12 }}
+            nodeColor={n => (NODE_TYPES_CONFIG[n.data?.nodeType] || LOCATION_TYPES_CONFIG.location).color}
+          />
         </ReactFlow>
       </div>
 
-      {nodes.length===0 && (
+      {visibleNodes.length===0 && (
         <div style={{ position:'absolute', top:'55%', left:'50%', transform:'translate(-50%,-50%)', textAlign:'center', pointerEvents:'none', zIndex:5 }}>
-          <div style={{ fontSize:40, opacity:.3, marginBottom:12 }}>🗺️</div>
-          <div style={{ fontFamily:'var(--font-display)', fontSize:17, color:'var(--slate)' }}>Canvas is empty</div>
-          <div style={{ fontSize:13, color:'var(--slate)', opacity:.6, marginTop:4 }}>Click <strong style={{ color:'var(--gold)' }}>+ Add location</strong> to start</div>
+          <div style={{ fontSize:40, opacity:.3, marginBottom:12 }}>{filter==='character'?'🎭':'🗺️'}</div>
+          <div style={{ fontFamily:'var(--font-display)', fontSize:17, color:'var(--slate)' }}>
+            {filter==='all' ? 'Canvas is empty' : `No ${filter}s yet`}
+          </div>
+          <div style={{ fontSize:13, color:'var(--slate)', opacity:.6, marginTop:4 }}>Click <strong style={{ color:'var(--gold)' }}>+ Add</strong> to start</div>
         </div>
       )}
 
@@ -445,8 +554,15 @@ export default function CanvasPage() {
       </div>
 
       {selected && <NodeSidebar node={selected} onUpdate={updateNode} onDelete={deleteNode} onClose={()=>setSelected(null)}/>}
-      {showAdd && <AddNodeModal onAdd={addNode} onClose={()=>setShowAdd(false)}/>}
+      {showAdd && <AddNodeModal defaultCategory={filter==='all'?'location':filter} onAdd={addNode} onClose={()=>setShowAdd(false)}/>}
       {pending && <EdgeModal src={srcNode} tgt={tgtNode} onConfirm={confirmEdge} onClose={()=>setPending(null)}/>}
+
+      <style>{`
+        @keyframes floatBlob {
+          0%, 100% { transform: translate(0,0); }
+          50% { transform: translate(30px, -25px); }
+        }
+      `}</style>
     </div>
   )
-}
+                  }
