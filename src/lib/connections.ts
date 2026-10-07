@@ -7,6 +7,9 @@ export const connectionKinds = {
   conflict: { label: "Conflict", color: "#b13b42", dash: "5 5" },
   river: { label: "River", color: "#3f779e", dash: undefined },
   border: { label: "Border", color: "#80659a", dash: "3 5" },
+  family: { label: "Family", color: "#695780", dash: "8 5" },
+  romance: { label: "Romance", color: "#b13b7e", dash: "4 4" },
+  rivalry: { label: "Rivalry", color: "#c67a31", dash: "6 6" },
 } as const;
 
 export type ConnectionKind = keyof typeof connectionKinds;
@@ -21,6 +24,9 @@ export function connectionKindOf(edge: StoryEdge): ConnectionKind {
   if (/river|water/.test(label)) return "river";
   if (/border|boundary/.test(label)) return "border";
   if (/alliance|ties|pact|watch|controls/.test(label)) return "alliance";
+  if (/family|blood|kin/.test(label)) return "family";
+  if (/romance|love|lover|partner/.test(label)) return "romance";
+  if (/rival|nemesis|competition/.test(label)) return "rivalry";
   return "road";
 }
 

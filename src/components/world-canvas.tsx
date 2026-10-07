@@ -11,7 +11,7 @@ import {
   ArrowLeft, ArrowRight, BookOpen, Building2, Castle, Check, ChevronDown, CircleDot,
   CloudSun, Download, Flag, Landmark, LayoutTemplate, Link2, Map, MapPin, Menu,
   Mountain, Plus, Route, Save, ScanLine, ShipWheel, Shuffle, Sparkles, Trash2,
-  Users, WandSparkles, X,
+  User, Users, WandSparkles, X,
 } from "lucide-react";
 import {
   entityMeta, instantiateTemplate, quickFillCanvas, worldTemplates,
@@ -29,7 +29,7 @@ type World = {
   canvas: { nodes: StoryNode[]; edges: StoryEdge[] } | null;
 };
 
-const icons: Record<EntityType, React.ElementType> = {
+const icons: Record<EntityType, React.ElementType> = { character: User,
   city: Building2, region: Mountain, landmark: Landmark, faction: Flag, ruin: Castle, port: ShipWheel,
 };
 
@@ -54,7 +54,7 @@ const palette: Array<{ type: EntityType; label: string; hint: string }> = [
   { type: "region", label: "Region", hint: "Territory" },
   { type: "landmark", label: "Landmark", hint: "Point of interest" },
   { type: "faction", label: "Faction", hint: "Group or power" },
-  { type: "ruin", label: "Ruin", hint: "Ancient place" },
+  { type: "ruin", label: "Ruin", hint: "Ancient place" }, { type: "character", label: "Character", hint: "Person of interest" },
   { type: "port", label: "Port", hint: "Harbor" },
 ];
 
@@ -197,7 +197,7 @@ export default function WorldCanvas({ world }: { world: World }) {
     loadCanvas(instantiateTemplate(template), append);
   }
 
-  function quickFill() { loadCanvas(quickFillCanvas(6), nodes.length > 0); }
+  function quickFill() { loadCanvas(quickFillCanvas(6, world.genre), nodes.length > 0); }
 
   function updateSelected(key: keyof StoryNodeData, value: string) {
     if (!selectedId) return;
